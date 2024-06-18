@@ -2,24 +2,34 @@ use plotters::prelude::*;
 use rayon::prelude::*;
 use std::env;
 use std::ops::Range;
+use std::time::Instant;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Parse command-line arguments
     let args: Vec<String> = env::args().collect();
     let mode = if args.len() > 1 { &args[1] } else { "serial" };
 
     let max_iter = if args.len() > 2 {
         args[2].parse::<usize>().unwrap_or(100)
-    } else {
-        100
-    };
+    } else { 100 };
 
-    compute_mandelbrot(max_iter, mode)
+    let w = if args.len() > 3 {
+        args[3].parse::<u32>().unwrap_or(800)
+    } else { 800 };
+    
+    let h = if args.len() > 4 {
+        args[4].parse::<u32>().unwrap_or(600)
+    } else { 600 };
+
+    let processes : Option<usize> = if args.len() > 5 {
+        args[5].parse::<usize>().ok()
+    } else { None };
+
+    compute_mandelbrot(max_iter, mode, w, h, processes)
 }
 
-fn compute_mandelbrot(max_iter: usize, mode: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn compute_mandelbrot(max_iter: usize, mode: &str, w: u32, h: u32, processes: Option<usize>) -> Result<(), Box<dyn std::error::Error>> {
     let path = format!("../data/rust/{}.png", mode);
-    let root = BitMapBackend::new(&path, (800, 600)).into_drawing_area();
+    let root = BitMapBackend::new(&path, (w, h)).into_drawing_area();
     root.fill(&WHITE)?;
 
     let mut chart = ChartBuilder::on(&root)
@@ -39,6 +49,7 @@ fn compute_mandelbrot(max_iter: usize, mode: &str) -> Result<(), Box<dyn std::er
     let (pw, ph) = (range.0.end - range.0.start, range.1.end - range.1.start);
     let (xr, yr) = (chart.x_range(), chart.y_range());
 
+    let start_time = Instant::now();
     match mode {
         "serial" => {
             for (x, y, c) in mandelbrot_set(xr, yr, (pw as usize, ph as usize), max_iter) {
@@ -51,9 +62,14 @@ fn compute_mandelbrot(max_iter: usize, mode: &str) -> Result<(), Box<dyn std::er
                     plotting_area.draw_pixel((x, y), &BLACK)?;
                 }
             }
+
+            let end_time = Instant::now();
+            let elapsed_time = end_time - start_time;
+            println!("Mode: {}\tWidth: {}\tHeight: {}\tTime: {:?}",mode,w, h, elapsed_time);
+
         }
         "parallel" => {
-            for (x, y, c) in mandelbrot_set_parallel(xr, yr, (pw as usize, ph as usize), max_iter) {
+            for (x, y, c) in mandelbrot_set_parallel(xr, yr, (pw as usize, ph as usize), max_iter, processes) {
                 if c != max_iter {
                     plotting_area.draw_pixel(
                         (x, y),
@@ -63,6 +79,11 @@ fn compute_mandelbrot(max_iter: usize, mode: &str) -> Result<(), Box<dyn std::er
                     plotting_area.draw_pixel((x, y), &BLACK)?;
                 }
             }
+
+            let end_time = Instant::now();
+            let elapsed_time = end_time - start_time;
+            println!("Mode: {}\tWidth: {}\tHeight: {}\tNum of threads: {}\tTime: {:?}",mode,w, h, processes.unwrap_or_else(|| num_cpus::get()), elapsed_time);
+
         }
         _ => {
             println!("Invalid mode. Please specify 'serial' or 'parallel'.");
@@ -70,6 +91,7 @@ fn compute_mandelbrot(max_iter: usize, mode: &str) -> Result<(), Box<dyn std::er
         }
     }
 
+    
     root.present()?;
     Ok(())
 }
@@ -79,12 +101,22 @@ fn mandelbrot_set_parallel(
     complex: Range<f64>,
     samples: (usize, usize),
     max_iter: usize,
+    num_processes: Option<usize>,
 ) -> Vec<(f64, f64, usize)> {
+    let num_threads = num_processes.unwrap_or_else(|| num_cpus::get());
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(num_threads)
+        .build_global()
+        .unwrap();
+
     let step = (
         (real.end - real.start) / samples.0 as f64,
         (complex.end - complex.start) / samples.1 as f64,
     );
-    (0..(samples.0 * samples.1)).into_par_iter().map(move |k| {
+
+    (0..(samples.0 * samples.1))
+    .into_par_iter()
+    .map(|k| {
         let c = (
             real.start + step.0 * (k % samples.0) as f64,
             complex.start + step.1 * (k / samples.0) as f64,
@@ -96,9 +128,9 @@ fn mandelbrot_set_parallel(
             cnt += 1;
         }
         (c.0, c.1, cnt)
-    }).collect()
+    })
+    .collect()
 }
-
 
 fn mandelbrot_set(
     real: Range<f64>,

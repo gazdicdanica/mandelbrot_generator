@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from functools import partial
 import multiprocessing
 import numpy as np
+import time
 
 def mandelbrot_calculate(yPos, h, w, max_iteration=1000):
     y0 = yPos * (2/float(h)) - 1  # rescale to -1 to 1
@@ -19,12 +20,16 @@ def mandelbrot_calculate(yPos, h, w, max_iteration=1000):
     return row
 
 def mandelbrot_serial(max_iteration, w, h):
+    start_time = time.time()
     partial_row = partial(mandelbrot_calculate, h=h, w=w, max_iteration=max_iteration)
-    mandelImg = map(partial_row, range(h))
-    return list(mandelImg)  
+    mandelImg = list(map(partial_row, range(h)))
+    end_time = time.time()
+    print(f"Mode: Serial\tWidth: {w}\tHeight: {h}\tTime: {end_time - start_time:.4f} seconds")
+    return mandelImg  
 
 
 def mandelbrot_parallel(max_iteration, w, h, num_processes):
+    start_time = time.time()
     partial_row = partial(mandelbrot_calculate, h=h, w=w, max_iteration=max_iteration)
  
     if num_processes is None:
@@ -32,7 +37,9 @@ def mandelbrot_parallel(max_iteration, w, h, num_processes):
     
     with multiprocessing.Pool(processes=num_processes) as pool:
         mandelImg = pool.map(partial_row, range(h)) 
- 
+    end_time = time.time()
+
+    print(f"Mode: Parallel\tWidth: {w}\tHeight: {h}\tNum of threads: {num_processes if num_processes != None else multiprocessing.cpu_count()}\t Time: {end_time - start_time:.4f} seconds")
     return mandelImg
 
 
@@ -50,7 +57,7 @@ def compute_mandelbrot(max_iter, mode, w, h, processes):
     
     plt.imshow(img, cmap='RdPu')
     plt.savefig(f"../data/python/{mode}.png")
-    plt.show()
+    # plt.show()
 
     
 

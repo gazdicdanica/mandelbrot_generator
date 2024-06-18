@@ -2,6 +2,7 @@ use plotters::prelude::*;
 use rayon::prelude::*;
 use std::env;
 use std::ops::Range;
+use std::time::Instant;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
@@ -48,6 +49,7 @@ fn compute_mandelbrot(max_iter: usize, mode: &str, w: u32, h: u32, processes: Op
     let (pw, ph) = (range.0.end - range.0.start, range.1.end - range.1.start);
     let (xr, yr) = (chart.x_range(), chart.y_range());
 
+    let start_time = Instant::now();
     match mode {
         "serial" => {
             for (x, y, c) in mandelbrot_set(xr, yr, (pw as usize, ph as usize), max_iter) {
@@ -60,6 +62,11 @@ fn compute_mandelbrot(max_iter: usize, mode: &str, w: u32, h: u32, processes: Op
                     plotting_area.draw_pixel((x, y), &BLACK)?;
                 }
             }
+
+            let end_time = Instant::now();
+            let elapsed_time = end_time - start_time;
+            println!("Mode: {}\tWidth: {}\tHeight: {}\tTime: {:?}",mode,w, h, elapsed_time);
+
         }
         "parallel" => {
             for (x, y, c) in mandelbrot_set_parallel(xr, yr, (pw as usize, ph as usize), max_iter, processes) {
@@ -72,6 +79,11 @@ fn compute_mandelbrot(max_iter: usize, mode: &str, w: u32, h: u32, processes: Op
                     plotting_area.draw_pixel((x, y), &BLACK)?;
                 }
             }
+
+            let end_time = Instant::now();
+            let elapsed_time = end_time - start_time;
+            println!("Mode: {}\tWidth: {}\tHeight: {}\tNum of threads: {}\tTime: {:?}",mode,w, h, processes.unwrap_or_else(|| num_cpus::get()), elapsed_time);
+
         }
         _ => {
             println!("Invalid mode. Please specify 'serial' or 'parallel'.");
@@ -79,6 +91,7 @@ fn compute_mandelbrot(max_iter: usize, mode: &str, w: u32, h: u32, processes: Op
         }
     }
 
+    
     root.present()?;
     Ok(())
 }

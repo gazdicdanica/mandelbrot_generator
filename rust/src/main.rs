@@ -4,7 +4,7 @@ use std::env;
 use std::ops::Range;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Parse command-line arguments
+    // command-line arguments
     let args: Vec<String> = env::args().collect();
     let mode = if args.len() > 1 { &args[1] } else { "serial" };
 

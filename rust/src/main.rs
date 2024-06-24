@@ -9,8 +9,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mode = if args.len() > 1 { &args[1] } else { "serial" };
 
     let max_iter = if args.len() > 2 {
-        args[2].parse::<usize>().unwrap_or(100)
-    } else { 100 };
+        args[2].parse::<usize>().unwrap_or(1000)
+    } else { 1000 };
 
     let w = if args.len() > 3 {
         args[3].parse::<u32>().unwrap_or(800)
@@ -20,14 +20,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         args[4].parse::<u32>().unwrap_or(600)
     } else { 600 };
 
-    let processes : Option<usize> = if args.len() > 5 {
-        args[5].parse::<usize>().ok()
+    let xmin = if args.len() > 5 {
+        args[5].parse::<f64>().unwrap_or(-2.2)
+    } else { -2.5 };
+
+    let xmax = if args.len() > 6 {
+        args[6].parse::<f64>().unwrap_or(1.0)
+    } else { 1.0 };
+
+    let ymin = if args.len() > 7 {
+        args[7].parse::<f64>().unwrap_or(-1.2)
+    } else { -1.0 };
+
+    let ymax = if args.len() > 8 {
+        args[8].parse::<f64>().unwrap_or(1.2)
+    } else { 1.0 };
+
+    let processes : Option<usize> = if args.len() > 9 {
+        args[9].parse::<usize>().ok()
     } else { None };
 
-    compute_mandelbrot(max_iter, mode, w, h, processes)
+    compute_mandelbrot(max_iter, mode, w, h, processes, xmin, xmax, ymin, ymax)
 }
 
-fn compute_mandelbrot(max_iter: usize, mode: &str, w: u32, h: u32, processes: Option<usize>) -> Result<(), Box<dyn std::error::Error>> {
+fn compute_mandelbrot(max_iter: usize, mode: &str, w: u32, h: u32, processes: Option<usize>, xmin: f64, xmax: f64, ymin: f64, ymax: f64) -> Result<(), Box<dyn std::error::Error>> {
     let path = format!("../data/rust/{}.png", mode);
     let root = BitMapBackend::new(&path, (w, h)).into_drawing_area();
     root.fill(&WHITE)?;
@@ -36,7 +52,7 @@ fn compute_mandelbrot(max_iter: usize, mode: &str, w: u32, h: u32, processes: Op
         .margin(20)
         .x_label_area_size(10)
         .y_label_area_size(10)
-        .build_cartesian_2d(-2.1f64..0.6f64, -1.2f64..1.2f64)?;
+        .build_cartesian_2d(xmin..xmax, ymin..ymax)?;
 
     chart
         .configure_mesh()
@@ -56,7 +72,7 @@ fn compute_mandelbrot(max_iter: usize, mode: &str, w: u32, h: u32, processes: Op
                 if c != max_iter {
                     plotting_area.draw_pixel(
                         (x, y),
-                        &MandelbrotHSL::get_color(c as f64 / max_iter as f64),
+                        &color_from_iteration(c, max_iter),
                     )?;
                 } else {
                     plotting_area.draw_pixel((x, y), &BLACK)?;
@@ -73,7 +89,7 @@ fn compute_mandelbrot(max_iter: usize, mode: &str, w: u32, h: u32, processes: Op
                 if c != max_iter {
                     plotting_area.draw_pixel(
                         (x, y),
-                        &MandelbrotHSL::get_color(c as f64 / max_iter as f64),
+                        &color_from_iteration(c, max_iter),
                     )?;
                 } else {
                     plotting_area.draw_pixel((x, y), &BLACK)?;
@@ -155,4 +171,17 @@ fn mandelbrot_set(
         }
         (c.0, c.1, cnt)
     })
+}
+
+fn color_from_iteration(iteration: usize, max_iter: usize) -> RGBColor {
+    if iteration == max_iter {
+        return RGBColor(0, 0, 0); 
+    }
+
+    let t = iteration as f64 / max_iter as f64;
+    let r = (9.0 * (1.0 - t) * t * t * t * 255.0) as u8;
+    let g = (15.0 * (1.0 - t) * (1.0 - t) * t * t * 255.0) as u8;
+    let b = (8.5 * (1.0 - t) * (1.0 - t) * (1.0 - t) * t * 255.0) as u8;
+
+    RGBColor(r, g, b)
 }

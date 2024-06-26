@@ -129,8 +129,14 @@ fn compute_mandelbrot(
             }
         }
         "parallel" => {
-            let set =
-                mandelbrot_set_parallel(xr, yr, (pw as usize, ph as usize), max_iter, processes, mode);
+            let set = mandelbrot_set_parallel(
+                xr,
+                yr,
+                (pw as usize, ph as usize),
+                max_iter,
+                processes,
+                mode,
+            );
             let end_time = Instant::now();
             let elapsed_time = end_time - start_time;
             println!(
@@ -166,17 +172,16 @@ fn mandelbrot_set_parallel(
     samples: (usize, usize),
     max_iter: usize,
     num_processes: Option<usize>,
-    mode: &str
+    mode: &str,
 ) -> Vec<(f64, f64, usize)> {
-    if mode != "gui"{
+    if mode != "gui" {
         let num_threads = num_processes.unwrap_or_else(|| num_cpus::get());
         rayon::ThreadPoolBuilder::new()
-        .num_threads(num_threads)
-        .build_global()
-        .unwrap();
-
+            .num_threads(num_threads)
+            .build_global()
+            .unwrap();
     }
-    
+
     let step = (
         (real.end - real.start) / samples.0 as f64,
         (complex.end - complex.start) / samples.1 as f64,
@@ -289,7 +294,38 @@ impl eframe::App for MandelbrotApp {
             });
         });
 
-        CentralPanel::default().show(ctx, |ui| draw_mandelbrot(self, EguiBackend::new(ui)));
+        CentralPanel::default().show(ctx, |ui| {
+            let response = ui.allocate_rect(ui.max_rect(), egui::Sense::drag());
+            if response.dragged() {
+                let delta = response.drag_delta();
+                let scale_x = (self.xmax - self.xmin) / self.width as f64;
+                let scale_y = (self.ymax - self.ymin) / self.height as f64;
+                self.xmin -= delta.x as f64 * scale_x;
+                self.xmax -= delta.x as f64 * scale_x;
+                self.ymin += delta.y as f64 * scale_y;
+                self.ymax += delta.y as f64 * scale_y;
+            }
+            let zoom_factor = 0.1;
+            ui.input(|input_state| {
+                let scroll_delta = input_state.scroll_delta.y;
+                if scroll_delta != 0.0 {
+                    let zoom: f64 = (1.0 - scroll_delta * zoom_factor).into();
+                    let cursor_pos = input_state.pointer.hover_pos().unwrap_or(ui.min_rect().center());
+                    let cursor_x = cursor_pos.x as f64;
+                    let cursor_y = cursor_pos.y as f64;
+                    let scale_x = (self.xmax - self.xmin) / self.width as f64;
+                    let scale_y = (self.ymax - self.ymin) / self.height as f64;
+                    let mid_x = self.xmin + cursor_x * scale_x;
+                    let mid_y = self.ymax - cursor_y * scale_y; // Inverted Y-axis
+
+                    self.xmin = mid_x + (self.xmin - mid_x) * zoom;
+                    self.xmax = mid_x + (self.xmax - mid_x) * zoom;
+                    self.ymin = mid_y + (self.ymin - mid_y) * zoom;
+                    self.ymax = mid_y + (self.ymax - mid_y) * zoom;
+                }
+            });
+            draw_mandelbrot(self, EguiBackend::new(ui))
+        });
         ctx.request_repaint();
     }
 }
@@ -321,7 +357,14 @@ where
     let (pw, ph) = (range.0.end - range.0.start, range.1.end - range.1.start);
     let (xr, yr) = (chart.x_range(), chart.y_range());
 
-    let set = mandelbrot_set_parallel(xr, yr, (pw as usize, ph as usize), app.max_iter, None, "gui");
+    let set = mandelbrot_set_parallel(
+        xr,
+        yr,
+        (pw as usize, ph as usize),
+        app.max_iter,
+        None,
+        "gui",
+    );
 
     for (x, y, c) in set {
         if c != app.max_iter {

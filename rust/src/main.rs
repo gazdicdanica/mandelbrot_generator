@@ -305,25 +305,28 @@ impl eframe::App for MandelbrotApp {
                 self.ymin += delta.y as f64 * scale_y;
                 self.ymax += delta.y as f64 * scale_y;
             }
-            let zoom_factor = 0.1;
-            ui.input(|input_state| {
-                let scroll_delta = input_state.scroll_delta.y;
-                if scroll_delta != 0.0 {
-                    let zoom: f64 = (1.0 - scroll_delta * zoom_factor).into();
-                    let cursor_pos = input_state.pointer.hover_pos().unwrap_or(ui.min_rect().center());
-                    let cursor_x = cursor_pos.x as f64;
-                    let cursor_y = cursor_pos.y as f64;
-                    let scale_x = (self.xmax - self.xmin) / self.width as f64;
-                    let scale_y = (self.ymax - self.ymin) / self.height as f64;
-                    let mid_x = self.xmin + cursor_x * scale_x;
-                    let mid_y = self.ymax - cursor_y * scale_y; // Inverted Y-axis
 
-                    self.xmin = mid_x + (self.xmin - mid_x) * zoom;
-                    self.xmax = mid_x + (self.xmax - mid_x) * zoom;
-                    self.ymin = mid_y + (self.ymin - mid_y) * zoom;
-                    self.ymax = mid_y + (self.ymax - mid_y) * zoom;
-                }
-            });
+            let zoom_delta: f32 = response.ctx.input(|i| i.zoom_delta()).into();
+            let zoom_factor: f32 = 2.0;
+            let (center_x, center_y) =
+                ((self.xmax + self.xmin) / 2.0, (self.ymax + self.ymin) / 2.0);
+
+            if zoom_delta > 1.0 {
+                // Zoom in
+                let factor: f64 = zoom_factor.powf(zoom_delta - 1.0).into();
+                self.xmin = center_x + (self.xmin - center_x) / factor;
+                self.xmax = center_x + (self.xmax - center_x) / factor;
+                self.ymin = center_y + (self.ymin - center_y) / factor;
+                self.ymax = center_y + (self.ymax - center_y) / factor;
+            } else if zoom_delta < 1.0 {
+                // Zoom out
+                let factor: f64 = zoom_factor.powf(1.0 - zoom_delta).into();
+                self.xmin = center_x + (self.xmin - center_x) * factor;
+                self.xmax = center_x + (self.xmax - center_x) * factor;
+                self.ymin = center_y + (self.ymin - center_y) * factor;
+                self.ymax = center_y + (self.ymax - center_y) * factor;
+            }
+
             draw_mandelbrot(self, EguiBackend::new(ui))
         });
         ctx.request_repaint();

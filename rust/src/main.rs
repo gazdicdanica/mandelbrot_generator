@@ -73,7 +73,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Box::new(|_cc| Box::new(app)),
         )?)
     } else {
-        compute_mandelbrot(max_iter, mode, w, h, processes, xmin, xmax, ymin, ymax)
+        let num_threads = processes.unwrap_or_else(|| num_cpus::get());
+        if mode.eq("parallel") {
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(num_threads)
+                .build_global()
+                .unwrap();
+        }
+        compute_mandelbrot(max_iter, mode, w, h, num_threads, xmin, xmax, ymin, ymax)
     }
 }
 
@@ -82,7 +89,7 @@ fn compute_mandelbrot(
     mode: &str,
     w: u32,
     h: u32,
-    processes: Option<usize>,
+    processes: usize,
     xmin: f64,
     xmax: f64,
     ymin: f64,
@@ -109,9 +116,9 @@ fn compute_mandelbrot(
     let (pw, ph) = (range.0.end - range.0.start, range.1.end - range.1.start);
     let (xr, yr) = (chart.x_range(), chart.y_range());
 
-    let start_time = Instant::now();
     match mode {
         "serial" => {
+            let start_time = Instant::now();
             let set = mandelbrot_set(xr, yr, (pw as usize, ph as usize), max_iter);
             let end_time = Instant::now();
             let elapsed_time = end_time - start_time;
@@ -119,7 +126,6 @@ fn compute_mandelbrot(
                 "Mode: {}\tWidth: {}\tHeight: {}\tTime: {:?}",
                 mode, w, h, elapsed_time
             );
-
             for (x, y, c) in set {
                 if c != max_iter {
                     plotting_area.draw_pixel((x, y), &color_from_iteration(c, max_iter))?;
@@ -129,13 +135,12 @@ fn compute_mandelbrot(
             }
         }
         "parallel" => {
+            let start_time = Instant::now();
             let set = mandelbrot_set_parallel(
                 xr,
                 yr,
                 (pw as usize, ph as usize),
                 max_iter,
-                processes,
-                mode,
             );
             let end_time = Instant::now();
             let elapsed_time = end_time - start_time;
@@ -144,10 +149,9 @@ fn compute_mandelbrot(
                 mode,
                 w,
                 h,
-                processes.unwrap_or_else(|| num_cpus::get()),
+                processes,
                 elapsed_time
             );
-
             for (x, y, c) in set {
                 if c != max_iter {
                     plotting_area.draw_pixel((x, y), &color_from_iteration(c, max_iter))?;
@@ -171,17 +175,7 @@ fn mandelbrot_set_parallel(
     complex: Range<f64>,
     samples: (usize, usize),
     max_iter: usize,
-    num_processes: Option<usize>,
-    mode: &str,
 ) -> Vec<(f64, f64, usize)> {
-    if mode != "gui" {
-        let num_threads = num_processes.unwrap_or_else(|| num_cpus::get());
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(num_threads)
-            .build_global()
-            .unwrap();
-    }
-
     let step = (
         (real.end - real.start) / samples.0 as f64,
         (complex.end - complex.start) / samples.1 as f64,
@@ -210,7 +204,7 @@ fn mandelbrot_set(
     complex: Range<f64>,
     samples: (usize, usize),
     max_iter: usize,
-) -> impl Iterator<Item = (f64, f64, usize)> {
+) -> Vec<(f64, f64, usize)> {
     let step = (
         (real.end - real.start) / samples.0 as f64,
         (complex.end - complex.start) / samples.1 as f64,
@@ -227,7 +221,7 @@ fn mandelbrot_set(
             cnt += 1;
         }
         (c.0, c.1, cnt)
-    })
+    }).collect()
 }
 
 fn color_from_iteration(iteration: usize, max_iter: usize) -> RGBColor {
@@ -277,17 +271,13 @@ impl eframe::App for MandelbrotApp {
                 ui.add(egui::Slider::new(&mut self.max_iter, 10..=5000));
             });
             ui.horizontal(|ui| {
-                // if ui.button("Redraw").clicked() {
-                //     // Trigger redraw
-                // }
-
                 if ui
                     .button("Snapshot")
                     .on_hover_text("Take a snapshot of the current view")
                     .clicked()
                 {
                     let res = take_snapshot(self);
-                    if let Err(e) = res {
+                    if let Err(_e) = res {
                         // eprintln!("Error: {:?}", e);
                     }
                 };
@@ -365,8 +355,6 @@ where
         yr,
         (pw as usize, ph as usize),
         app.max_iter,
-        None,
-        "gui",
     );
 
     for (x, y, c) in set {

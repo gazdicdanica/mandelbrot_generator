@@ -3,6 +3,8 @@ import multiprocessing
 import numpy as np
 import time
 from functools import partial
+import sys
+
 
 def mandelbrot_calculate(yPos, h, w, max_iteration, xmin, xmax, ymin, ymax):
     y0 = yPos * (ymax - ymin) / float(h) + ymin  
@@ -28,9 +30,6 @@ def mandelbrot_serial(max_iteration, w, h, xmin, xmax, ymin, ymax):
 def mandelbrot_parallel(max_iteration, w, h, num_processes, xmin, xmax, ymin, ymax):
     start_time = time.time()
     partial_row = partial(mandelbrot_calculate, h=h, w=w, max_iteration=max_iteration, xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax)
- 
-    if num_processes is None:
-        num_processes = multiprocessing.cpu_count()
     
     with multiprocessing.Pool(processes=num_processes) as pool:
         mandelImg = pool.map(partial_row, range(h)) 
@@ -51,12 +50,12 @@ def compute_mandelbrot(max_iter, mode, w, h, processes, xmin, xmax, ymin, ymax):
     img = np.array(img, dtype=float)  
     img = np.log(img + 1)  
     
-    plt.imshow(img, cmap='RdPu', extent=[xmin, xmax, ymin, ymax])
+    plt.imshow(img, cmap='PuBu', extent=[xmin, xmax, ymin, ymax])
     plt.savefig(f"../data/python/{mode}.png")
-    plt.show()
+    # plt.show()
 
 if __name__ == "__main__":
-    import sys
+    start_time = time.time()
     mode = sys.argv[1] if len(sys.argv) > 1 else "serial"
     max_iter = int(sys.argv[2]) if len(sys.argv) > 2 else 1000
     w = int(sys.argv[3]) if len(sys.argv) > 3 else 800
@@ -68,6 +67,8 @@ if __name__ == "__main__":
 
     processes = None
     if mode == "parallel":
-        processes = int(sys.argv[9]) if len(sys.argv) > 9 else None
+        processes = int(sys.argv[9]) if len(sys.argv) > 9 else multiprocessing.cpu_count()
     
     compute_mandelbrot(max_iter, mode, w, h, processes, xmin, xmax, ymin, ymax)
+    end_time = time.time()
+    print(f"Total execution time: {end_time - start_time:.4f} seconds")

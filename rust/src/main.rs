@@ -6,9 +6,18 @@ use std::env;
 use std::ops::Range;
 use std::time::Instant;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() {
+    let start_time = Instant::now();
     let args: Vec<String> = env::args().collect();
     let mode = if args.len() > 1 { &args[1] } else { "serial" };
+
+    if mode.eq("strong_scale") {
+        strong_scale();
+        return;
+    }else if mode.eq("weak_scale") {
+        weak_scale();
+        return;
+    }
 
     let max_iter = if args.len() > 2 {
         args[2].parse::<usize>().unwrap_or(1000)
@@ -67,11 +76,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Create and run the application
         let app = MandelbrotApp::default();
         let native_options = eframe::NativeOptions::default();
-        Ok(eframe::run_native(
+        let _ = eframe::run_native(
             "Mandelbrot Viewer",
             native_options,
             Box::new(|_cc| Box::new(app)),
-        )?)
+        );
     } else {
         let num_threads = processes.unwrap_or_else(|| num_cpus::get());
         if mode.eq("parallel") {
@@ -80,8 +89,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .build_global()
                 .unwrap();
         }
-        compute_mandelbrot(max_iter, mode, w, h, num_threads, xmin, xmax, ymin, ymax)
+        let _ = compute_mandelbrot(max_iter, mode, w, h, num_threads, xmin, xmax, ymin, ymax);
     }
+
+    let end_time = Instant::now();
+    let elapsed_time = end_time - start_time;
+    println!("Total execution time: {:?}", elapsed_time);
 }
 
 fn compute_mandelbrot(
@@ -136,21 +149,12 @@ fn compute_mandelbrot(
         }
         "parallel" => {
             let start_time = Instant::now();
-            let set = mandelbrot_set_parallel(
-                xr,
-                yr,
-                (pw as usize, ph as usize),
-                max_iter,
-            );
+            let set = mandelbrot_set_parallel(xr, yr, (pw as usize, ph as usize), max_iter);
             let end_time = Instant::now();
             let elapsed_time = end_time - start_time;
             println!(
                 "Mode: {}\tWidth: {}\tHeight: {}\tNum of threads: {}\tTime: {:?}",
-                mode,
-                w,
-                h,
-                processes,
-                elapsed_time
+                mode, w, h, processes, elapsed_time
             );
             for (x, y, c) in set {
                 if c != max_iter {
@@ -161,7 +165,7 @@ fn compute_mandelbrot(
             }
         }
         _ => {
-            println!("Invalid mode. Please specify 'serial' or 'parallel'.");
+            println!("Invalid mode. Please specify one of: 'serial', 'parallel', 'gui', 'strong_scale', 'weak_scale'.");
             return Ok(());
         }
     }
@@ -209,19 +213,21 @@ fn mandelbrot_set(
         (real.end - real.start) / samples.0 as f64,
         (complex.end - complex.start) / samples.1 as f64,
     );
-    (0..(samples.0 * samples.1)).map(move |k| {
-        let c = (
-            real.start + step.0 * (k % samples.0) as f64,
-            complex.start + step.1 * (k / samples.0) as f64,
-        );
-        let mut z = (0.0, 0.0);
-        let mut cnt = 0;
-        while cnt < max_iter && z.0 * z.0 + z.1 * z.1 <= 1e10 {
-            z = (z.0 * z.0 - z.1 * z.1 + c.0, 2.0 * z.0 * z.1 + c.1);
-            cnt += 1;
-        }
-        (c.0, c.1, cnt)
-    }).collect()
+    (0..(samples.0 * samples.1))
+        .map(move |k| {
+            let c = (
+                real.start + step.0 * (k % samples.0) as f64,
+                complex.start + step.1 * (k / samples.0) as f64,
+            );
+            let mut z = (0.0, 0.0);
+            let mut cnt = 0;
+            while cnt < max_iter && z.0 * z.0 + z.1 * z.1 <= 1e10 {
+                z = (z.0 * z.0 - z.1 * z.1 + c.0, 2.0 * z.0 * z.1 + c.1);
+                cnt += 1;
+            }
+            (c.0, c.1, cnt)
+        })
+        .collect()
 }
 
 fn color_from_iteration(iteration: usize, max_iter: usize) -> RGBColor {
@@ -350,12 +356,7 @@ where
     let (pw, ph) = (range.0.end - range.0.start, range.1.end - range.1.start);
     let (xr, yr) = (chart.x_range(), chart.y_range());
 
-    let set = mandelbrot_set_parallel(
-        xr,
-        yr,
-        (pw as usize, ph as usize),
-        app.max_iter,
-    );
+    let set = mandelbrot_set_parallel(xr, yr, (pw as usize, ph as usize), app.max_iter);
 
     for (x, y, c) in set {
         if c != app.max_iter {
@@ -372,4 +373,107 @@ fn take_snapshot(app: &MandelbrotApp) -> Result<(), Box<dyn std::error::Error>> 
     let path = format!("../data/rust/{}.png", "gui");
 
     draw_mandelbrot(app, BitMapBackend::new(&path, (app.width, app.height)))
+}
+
+fn calculate_mean(data: &[f64]) -> f64 {
+    let sum: f64 = data.iter().sum();
+    sum / data.len() as f64
+}
+
+fn calculate_variance(data: &[f64], mean: f64) -> f64 {
+    let variance: f64 = data
+        .iter()
+        .map(|value| {
+            let diff = mean - *value;
+            diff * diff
+        })
+        .sum();
+    variance / data.len() as f64
+}
+
+fn calculate_standard_deviation(data: &[f64]) -> f64 {
+    let mean = calculate_mean(data);
+    let variance = calculate_variance(data, mean);
+    variance.sqrt()
+}
+
+fn strong_scale() {
+    let processes = [1, 2, 4, 6, 8, 12, 16, 18];
+    let max_iter = 1000;
+    let w = 800;
+    let h = 500;
+    let xmin = -2.5;
+    let xmax = 1.0;
+    let ymin = -1.0;
+    let ymax = 1.0;
+
+    for &p in processes.iter() {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(p)
+            .build()
+            .unwrap();
+
+        pool.scope(|_| {
+            let mut vec = Vec::<std::time::Duration>::new();
+            for _ in 0..30 {
+                let start_time = Instant::now();
+                let _ = compute_mandelbrot(max_iter, "parallel", w, h, p, xmin, xmax, ymin, ymax);
+                let end_time = Instant::now();
+                let elapsed_time = end_time - start_time;
+                vec.push(elapsed_time);
+                // println!("Processes: {}\tTime: {:?}", p, elapsed_time);
+            }
+
+            let times: Vec<f64> = vec.iter().map(|d| d.as_secs_f64()).collect();
+            println!(
+                "Processes: {}\tMean time: {:?}\tStd dev: {:?}",
+                p,
+                calculate_mean(&times),
+                calculate_standard_deviation(&times)
+            );
+        });
+    }
+}
+
+
+fn weak_scale(){
+    let processes = [1, 2, 4, 6, 8, 12, 16, 18];
+    // let processes = [18];
+    let max_iter = 1000;
+    let w = 800;
+    let h = [500, 1000, 2000, 3000, 4000, 6000, 8000, 10000];
+    // let h = [10000];
+    let xmin = -2.5;
+    let xmax = 1.0;
+    let ymin = -1.0;
+    let ymax = 1.0;
+
+
+    for i in 0..8{
+        let height = h[i];
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(processes[i])
+            .build()
+            .unwrap();
+
+        pool.scope(|_| {
+            let mut vec = Vec::<std::time::Duration>::new();
+            for _ in 0..30 {
+                let start_time = Instant::now();
+                let _ = compute_mandelbrot(max_iter, "parallel", w, height, processes[i], xmin, xmax, ymin, ymax);
+                let end_time = Instant::now();
+                let elapsed_time = end_time - start_time;
+                vec.push(elapsed_time);
+                // println!("Processes: {}\tTime: {:?}", p, elapsed_time);
+            }
+
+            let times: Vec<f64> = vec.iter().map(|d| d.as_secs_f64()).collect();
+            println!(
+                "Processes: {}\tMean time: {:?}\tStd dev: {:?}",
+                processes[i],
+                calculate_mean(&times),
+                calculate_standard_deviation(&times)
+            );
+        });
+    }
 }

@@ -52,12 +52,11 @@ def compute_mandelbrot(max_iter, mode, w, h, processes, xmin, xmax, ymin, ymax):
     
     plt.imshow(img, cmap='PuBu', extent=[xmin, xmax, ymin, ymax])
     plt.savefig(f"../data/python/{mode}.png")
-    # plt.show()
+    plt.show()
 
 
 def strong_scaling():
-    # processes = [1, 2, 4, 6, 8, 12, 16, 18]
-    processes = [12]
+    processes = [1, 2, 4, 6, 8, 12, 16, 18]
     max_iter = 1000
     w = 800
     h = 500
@@ -83,7 +82,7 @@ def strong_scaling():
     print(std_devs)
 
 def weak_scaling():
-    # processes = [1, 2, 4, 6, 8, 12, 16, 18]
+    processes = [1, 2, 4, 6, 8, 12, 16, 18]
     max_iter = 1000
     w = 200
     h = [100, 200, 400, 600, 800, 1200, 1600, 1800]
@@ -112,10 +111,10 @@ def weak_scaling():
 if __name__ == "__main__":
     start_time = time.time()
     mode = sys.argv[1] if len(sys.argv) > 1 else "serial"
-    if(mode == "strong"):
+    if(mode == "strong_scale"):
         strong_scaling()
         exit(0)
-    elif(mode == "weak"):
+    elif(mode == "weak_scale"):
         weak_scaling()
         exit(0)
     max_iter = int(sys.argv[2]) if len(sys.argv) > 2 else 1000

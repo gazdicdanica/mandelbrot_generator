@@ -438,11 +438,9 @@ fn strong_scale() {
 
 fn weak_scale(){
     let processes = [1, 2, 4, 6, 8, 12, 16, 18];
-    // let processes = [18];
     let max_iter = 1000;
     let w = 800;
     let h = [500, 1000, 2000, 3000, 4000, 6000, 8000, 10000];
-    // let h = [10000];
     let xmin = -2.5;
     let xmax = 1.0;
     let ymin = -1.0;

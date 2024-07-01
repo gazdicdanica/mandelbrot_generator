@@ -1,139 +1,174 @@
-import sys
-import os
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from python.main import compute_mandelbrot
-import time
-import multiprocessing
 import numpy as np
 import matplotlib.pyplot as plt
-import pandas as pd
 
-def plot_scaling(serial_mean, parallel_means, num_processors, title, xlabel, ylabel):
-    speedup = [serial_mean / pm for pm in parallel_means]
-    ideal_speedup = num_processors
+def plot_amdahl(s, p):
+    N_values = np.arange(1, 30) 
 
-    plt.figure()
-    plt.plot(num_processors, speedup, label='Actual Speedup')
-    plt.plot(num_processors, ideal_speedup, label='Ideal Speedup', linestyle='--')
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
-    plt.title(title)
+    amdahl = 1 / (s + p / N_values)
+    plt.plot(N_values, amdahl,  linestyle='-', color='b', label='Амдалов закон')
+
+
+def plot_gaufstason(s, p):
+    N_values = np.arange(1, 30) 
+
+    gaufstason = s + p * N_values
+    plt.plot(N_values, gaufstason,  linestyle='-', color='r', label='Гауфстафсонов закон')
+
+def rust_strong_scaling():
+    real_N = [1, 2, 4, 6, 8, 12, 16, 18]
+    serial_time=665.6095
+    times = [
+        639.638,
+        466.853,
+        393.328,
+        372.541,
+        336.99,
+        323.165,
+        325.128,
+        347.788
+    ]
+
+    plt.figure(figsize=(10, 6))
+
+    plot_amdahl(0.44, 0.56)
+
+    plt.plot(real_N, serial_time / np.array(times),  'o',  color='r', label='Експериментални подаци')
+
+
+    plt.title('Јако скалирање')
+    plt.xlabel('Број процесора (N)')
+    plt.ylabel('Максимум убрзања')
     plt.legend()
     plt.grid(True)
+    plt.tight_layout()
     plt.show()
 
-def generate_table(serial_mean, serial_std, serial_times, parallel_means, parallel_stds, parallel_times, num_processors, title):
-    data = {
-        'Number of Processors': num_processors,
-        'Serial Mean Time': [serial_mean] * len(num_processors),
-        'Serial Std Dev': [serial_std] * len(num_processors),
-        'Parallel Mean Time': parallel_means,
-        'Parallel Std Dev': parallel_stds
-    }
-    df = pd.DataFrame(data)
-    print(f"\n{title}\n", df)
-    return df
+
+def rust_weak_scaling():
+    real_N = [1, 2, 4, 6, 8, 12, 16, 18]
+
+    times = [ 
+        0.6325,
+        0.9164,
+        1.5516,
+        2.0921,
+        2.6565,
+        3.8464,
+        5.0901,
+        6.9013
+    ]
+
+    serial_times = [
+        0.66561,
+        1.3786,
+        2.8698,
+        4.10068,
+        5.48921,
+        8.467371,
+        11.45148,
+        14.59848
+    ]
+
+    plt.figure(figsize=(10, 6))
+
+    plot_gaufstason(0.44, 0.56)
+
+    plt.plot(real_N, np.array(serial_times) / np.array(times),  'o',  color='r', label='Експериментални подаци')
 
 
-def repeat_measurements(measure_function, max_iter, w, h, mode, processes, repetitions=30):
-    times = []
-    for _ in range(repetitions):
-        time_taken = measure_function(max_iter, w, h, mode, processes)
-        times.append(time_taken)
-    return np.mean(times), np.std(times), times
-
-def strong_scaling_performance(measure_function, max_iter, w, h, num_processors, repetitions=30):
-    serial_mean, serial_std, serial_times = repeat_measurements(measure_function, max_iter, w, h, 'serial', None, repetitions)
-    parallel_means = []
-    parallel_stds = []
-    parallel_times = []
-    for p in num_processors:
-        mean, std, times = repeat_measurements(measure_function, max_iter, w, h, 'parallel', p, repetitions)
-        parallel_means.append(mean)
-        parallel_stds.append(std)
-        parallel_times.append(times)
-    return serial_mean, serial_std, serial_times, parallel_means, parallel_stds, parallel_times
+    plt.title('Слабо скалирање')
+    plt.xlabel('Број процесора (N)')
+    plt.ylabel('Максимум убрзања')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
 
 
-def weak_scaling_performance(measure_function, max_iter, base_w, base_h, num_processors, repetitions=30):
-    base_serial_mean, base_serial_std, base_serial_times = repeat_measurements(measure_function, max_iter, base_w, base_h, 'serial', None, repetitions)
-    parallel_means = []
-    parallel_stds = []
-    parallel_times = []
-    for p in num_processors:
-        w, h = base_w * p, base_h * p
-        mean, std, times = repeat_measurements(measure_function, max_iter, w, h, 'parallel', p, repetitions)
-        parallel_means.append(mean)
-        parallel_stds.append(std)
-        parallel_times.append(times)
-    return base_serial_mean, base_serial_std, base_serial_times, parallel_means, parallel_stds, parallel_times
+def python_strong_scaling():
+    real_N = [1, 2, 4, 6, 8, 12, 16, 18]
+    serial_time=27.1547
+    times = [    
+        27.1547,
+        14.1325,
+        9.8518,
+        8.5847,
+        6.9814,
+        6.6512,
+        7.5511,
+        8.0717
+    ]
+
+    plt.figure(figsize=(10, 6))
+
+    plot_amdahl(0.0185, 0.9815)
+
+    plt.plot(real_N, serial_time / np.array(times),  'o',  color='r', label='Експериментални подаци')
 
 
-def measure_python_performance(max_iter, w, h, mode, processes):
-    start_time = time.time()
-    compute_mandelbrot(max_iter, mode, w, h, processes)
-    end_time = time.time()
-    return end_time - start_time
+    plt.title('Јако скалирање')
+    plt.xlabel('Број процесора (N)')
+    plt.ylabel('Максимум убрзања')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
 
 
-def get_max_speedup():
-    max_iter = 100
-    w = 800
-    h = 500
+def python_weak_scaling():
+    real_N = [1, 2, 4, 6, 8, 12, 16, 18]
 
-    serial_time = measure_python_performance(max_iter, w, h, "serial", None)
-    
-    processes = multiprocessing.cpu_count()
+    times = [ 
+        2.3403,
+        2.2647,
+        2.5476,
+        2.8089,
+        3.6374,
+        4.9863,
+        6.2200,
+        7.446
+    ]
 
-    parallel_time = measure_python_performance(max_iter, w, h, "parallel", processes)
+    serial_times = [
+        2.3403,
+        3.4311,
+        6.1228,
+        8.8029,
+        11.2296,
+        16.86,
+        20.6899,
+        22.6349
+    ]
 
-    print(f"Sequential execution time: {serial_time:.4f} S")
-    print(f"Parallel execution time with {processes} processors: {parallel_time:.4f} S")
+    plt.figure(figsize=(10, 6))
 
-    S = (parallel_time - (serial_time / processes)) / parallel_time
-    P = 1 - S
+    plot_gaufstason(0.44, 0.56)
 
-    print(f"Sequential code percent: {S:.4f}")
-    print(f"Parallel code percent: {P:.4f}")
-   
-    Amdal_max_speedup = 1 / (S + (P / processes))
-    Gustafson_max_speedup = S + (P * processes)
+    plt.plot(real_N, np.array(serial_times) / np.array(times),  'o',  color='r', label='Експериментални подаци')
 
-    print(f"Amdahl's law: {Amdal_max_speedup:.4f}")
-    print(f"Gustafson's law: {Gustafson_max_speedup:.4f}")
 
+    plt.title('Слабо скалирање')
+    plt.xlabel('Број процесора (N)')
+    plt.ylabel('Максимум убрзања')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
 
 if __name__ == "__main__":
-    # get_max_speedup()
+
+    # rust_strong_scaling()
+    # rust_weak_scaling()
+    # python_strong_scaling()
+    python_weak_scaling()
     
-    max_iter = 100
-    w = 800
-    h = 500
-    base_w = 200
-    base_h = 125
-    num_processors = [1, 2, 4, 8, 12, None]
-    repetitions = 10
+    # n = 1; 27.1547, 1.1559, outliers = 30.2050, 30.1540, 30.0040
+    # n = 2; 14.1325, 0.2506
+    # n = 4; 9.8518, 0.2726
+    # n = 6; 8.5847, 0.4103
+    # n = 8; 6.9814, 0.3237
+    # n = 12; 6.651233, 0.232344
+    # n = 16; 7.5511, 0.3962
+    # n = 18;  8.0717, 1.3992, outliers = 15.3950
 
-    # Jako skaliranje Python
-    serial_mean, serial_std, serial_times, parallel_means, parallel_stds, parallel_times = strong_scaling_performance(measure_python_performance, max_iter, w, h, num_processors, repetitions)
-    plot_scaling(serial_mean, parallel_means, num_processors, 'Jako skaliranje Python', 'Broj procesora', 'Ubrzanje')
-    generate_table(serial_mean, serial_std, serial_times, parallel_means, parallel_stds, parallel_times, num_processors, 'Tabela: Jako skaliranje Python')
-
-    # Jako skaliranje Rust
-    # serial_mean, serial_std, serial_times, parallel_means, parallel_stds, parallel_times = strong_scaling_performance(measure_rust_performance, max_iter, w, h, num_processors, repetitions)
-    # plot_scaling(serial_mean, parallel_means, num_processors, 'Jako skaliranje Rust', 'Broj procesora', 'Ubrzanje')
-    # generate_table(serial_mean, serial_std, serial_times, parallel_means, parallel_stds, parallel_times, num_processors, 'Tabela: Jako skaliranje Rust')
-
-    # Slabo skaliranje Python
-    # serial_mean, serial_std, serial_times, parallel_means, parallel_stds, parallel_times = weak_scaling_performance(measure_python_performance, max_iter, base_w, base_h, num_processors, repetitions)
-    # plot_scaling(serial_mean, parallel_means, num_processors, 'Slabo skaliranje Python', 'Broj procesora', 'Ubrzanje')
-    # generate_table(serial_mean, serial_std, serial_times, parallel_means, parallel_stds, parallel_times, num_processors, 'Tabela: Slabo skaliranje Python')
-
-    # Slabo skaliranje Rust
-    # serial_mean, serial_std, serial_times, parallel_means, parallel_stds, parallel_times = weak_scaling_performance(measure_rust_performance, max_iter, base_w, base_h, num_processors, repetitions)
-    # plot_scaling(serial_mean, parallel_means, num_processors, 'Slabo skaliranje Rust', 'Broj procesora', 'Ubrzanje')
-    # generate_table(serial_mean, serial_std, serial_times, parallel_means, parallel_stds, parallel_times, num_processors, 'Tabela: Slabo skaliranje Rust')
-
-    
+   
